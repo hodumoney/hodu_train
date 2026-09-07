@@ -53,6 +53,12 @@ TG_TOKEN = os.environ.get("TELEGRAM_TOKEN", "").strip()
 TG_CHAT = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
 DEVICE_ID = os.environ.get("DEVICE_PROFILE_ID", "").strip()
 
+CARD_NUMBER = os.environ.get("CARD_NUMBER", "").replace("-", "").replace(" ", "").strip()
+CARD_PASSWORD = os.environ.get("CARD_PASSWORD", "").strip()
+CARD_VERIFY = os.environ.get("CARD_VERIFY", "").strip()
+CARD_EXPIRE = os.environ.get("CARD_EXPIRE", "").replace("/", "").strip()
+CARD_CORPORATE = os.environ.get("CARD_CORPORATE", "").strip().lower() in {"1", "true", "yes"}
+
 
 # ─────────────────────────── 유틸 ───────────────────────────
 
@@ -119,6 +125,59 @@ def save_state(state: dict) -> None:
 
 
 # ─────────────────────────── 설정 해석 ───────────────────────────
+
+
+def build_card():
+    """Secrets 에 카드 정보가 다 있으면 Card 를 만든다. 하나라도 없으면 None."""
+    from pykorail import Card
+
+    missing = [
+        name
+        for name, value in (
+            ("CARD_NUMBER", CARD_NUMBER),
+            ("CARD_PASSWORD", CARD_PASSWORD),
+            ("CARD_VERIFY", CARD_VERIFY),
+            ("CARD_EXPIRE", CARD_EXPIRE),
+        )
+        if not value
+    ]
+    if missing:
+        return None, f"{', '.join(missing)} 가 설정되지 않음"
+
+    problems = []
+    if not CARD_NUMBER.isdigit() or not 15 <= len(CARD_NUMBER) <= 16:
+        problems.append("CARD_NUMBER 는 하이픈 없는 15~16자리 숫자여야 합니다")
+    if not CARD_PASSWORD.isdigit() or len(CARD_PASSWORD) != 2:
+        problems.append("CARD_PASSWORD 는 카드 비밀번호 앞 2자리여야 합니다")
+    if not CARD_EXPIRE.isdigit() or len(CARD_EXPIRE) != 4:
+        problems.append("CARD_EXPIRE 는 YYMM 4자리여야 합니다 (예: 2812)")
+    expected_verify = 10 if CARD_CORPORATE else 6
+    if not CARD_VERIFY.isdigit() or len(CARD_VERIFY) != expected_verify:
+        problems.append(
+            f"CARD_VERIFY 는 {'사업자등록번호 10자리' if CARD_CORPORATE else '생년월일 YYMMDD 6자리'}여야 합니다"
+        )
+    if problems:
+        return None, " / ".join(problems)
+
+    return (
+        Card(
+            number=CARD_NUMBER,
+            password=CARD_PASSWORD,
+            verify_number=CARD_VERIFY,
+            expire=CARD_EXPIRE,
+            is_corporate=CARD_CORPORATE,
+        ),
+        None,
+    )
+
+
+def parse_payment(config: dict) -> dict:
+    raw = config.get("자동결제") or {}
+    return {
+        "사용": bool(raw.get("사용", False)),
+        "1건당상한": int(raw.get("1건당상한", 0)),
+        "최대건수": int(raw.get("최대건수", 0)),  # 0 이면 무제한
+    }
 
 
 def target_id(target: dict) -> str:
@@ -204,7 +263,9 @@ def pick_train(trains, target: dict):
 # ─────────────────────────── 목표 하나 처리 ───────────────────────────
 
 
-def handle_target(korail: Korail, target: dict, state: dict) -> None:
+def handle_target(
+    korail: Korail, target: dict, state: dict, pay_cfg: dict, card, card_error
+) -> None:
     tid = target["id"]
     name = target["이름"]
 
@@ -240,7 +301,10 @@ def handle_target(korail: Korail, target: dict, state: dict) -> None:
         log(f"[{name}] 좌석 발견 — {train.summary()} ({grade})")
 
         if DRY_RUN:
-            notify(f"🧪 [테스트] 좌석을 찾았습니다 (실제 예약은 하지 않음)\n\n{name}\n{train.summary()}\n{grade}")
+            notify(
+                f"🧪 [테스트] 좌석을 찾았습니다 (예약·결제 모두 하지 않음)\n\n"
+                f"{name}\n{train.summary()}\n{grade}"
+            )
             state["예약완료"][tid] = {"테스트": True, "시각": datetime.now(KST).isoformat()}
             save_state(state)
             return
@@ -255,22 +319,69 @@ def handle_target(korail: Korail, target: dict, state: dict) -> None:
 
         deadline = f"{reservation.buy_limit_date[4:6]}/{reservation.buy_limit_date[6:8]} " \
                    f"{reservation.buy_limit_time[:2]}:{reservation.buy_limit_time[2:4]}"
-        message = (
-            f"🎫 예약 성공\n\n"
+        detail = (
             f"{name}\n{train.summary()}\n"
-            f"{reservation.seat_no_count}석 · {reservation.price:,}원\n\n"
-            f"⏰ 결제 기한: {deadline}\n"
-            f"코레일톡 앱에서 결제하세요. 기한이 지나면 자동 취소됩니다.\n\n"
-            f"이 열차를 다시 감시하려면 state.json 에서\n\"{tid}\" 줄을 지우세요."
+            f"{reservation.seat_no_count}석 · {reservation.price:,}원"
         )
-
-        notify(message)
-        state["예약완료"][tid] = {
+        record = {
             "예약번호": reservation.rsv_id,
+            "금액": reservation.price,
             "결제기한": deadline,
             "시각": datetime.now(KST).isoformat(),
         }
+
+        # ── 자동 결제를 할지 판단한다 ──
+        skip_reason = None
+        if not pay_cfg["사용"]:
+            skip_reason = "자동결제가 꺼져 있습니다"
+        elif card is None:
+            skip_reason = f"카드 정보 문제 — {card_error}"
+        elif reservation.price > pay_cfg["1건당상한"] > 0:
+            skip_reason = (
+                f"금액이 1건당 상한({pay_cfg['1건당상한']:,}원)을 넘습니다"
+            )
+        elif pay_cfg["최대건수"] and state["결제건수"] >= pay_cfg["최대건수"]:
+            skip_reason = f"자동결제 건수 상한({pay_cfg['최대건수']}건)에 도달했습니다"
+        elif (
+            reservation.train.dep_date != target["dep_date"]
+            or reservation.train.dep_time[:4] != target["dep_hhmm"]
+        ):
+            # 있어선 안 되는 상황이지만, 돈이 나가는 일이라 한 번 더 확인한다.
+            skip_reason = "예약된 열차가 목표와 다릅니다"
+
+        if skip_reason is None:
+            try:
+                korail.reservations.pay(reservation, card)
+            except KorailError as exc:
+                log(f"[{name}] 결제 거부 — {exc.msg} ({exc.code})")
+                skip_reason = f"결제가 거부됐습니다 — {exc.msg}"
+            else:
+                log(f"[{name}] 결제 완료 — {reservation.price:,}원")
+                record["결제"] = "완료"
+                state["예약완료"][tid] = record
+                state["결제건수"] = state.get("결제건수", 0) + 1
+                save_state(state)
+                notify(
+                    f"✅ 예약 + 결제 완료\n\n{detail}\n\n"
+                    f"코레일톡 앱에서 승차권을 확인하세요.\n\n"
+                    f"이 열차를 다시 감시하려면 state.json 에서\n\"{tid}\" 줄을 지우세요."
+                )
+                return
+
+        # ── 결제를 못 했다. 예약은 살아 있으니 급히 알린다 ──
+        record["결제"] = "안 됨"
+        record["사유"] = skip_reason
+        state["예약완료"][tid] = record
         save_state(state)
+
+        message = (
+            f"🎫 예약 성공 — 결제는 직접 하세요\n\n{detail}\n\n"
+            f"⏰ 결제 기한: {deadline}\n"
+            f"사유: {skip_reason}\n\n"
+            f"코레일톡 앱에서 결제하세요. 기한이 지나면 자동 취소됩니다.\n\n"
+            f"이 열차를 다시 감시하려면 state.json 에서\n\"{tid}\" 줄을 지우세요."
+        )
+        notify(message)
         for _ in range(ALERT_REPEAT - 1):
             time.sleep(ALERT_GAP_SECONDS)
             notify(message)
@@ -316,12 +427,24 @@ def main() -> None:
     state.setdefault("예약완료", {})
     state.setdefault("예약대기", [])
     state.setdefault("없는열차", [])
+    state.setdefault("결제건수", 0)
+
+    pay_cfg = parse_payment(config)
+    card, card_error = build_card()
 
     targets = parse_targets(config)
     pending = [t for t in targets if t["id"] not in state["예약완료"]]
 
     log(f"설정된 목표 {len(targets)}개 / 감시 대상 {len(pending)}개"
         + (" · 테스트 모드" if DRY_RUN else ""))
+    if not pay_cfg["사용"]:
+        log("자동결제: 꺼짐 — 예약만 잡고 알립니다.")
+    elif card is None:
+        log(f"자동결제: 켜져 있지만 사용할 수 없습니다 — {card_error}")
+    else:
+        cap = f"{pay_cfg['1건당상한']:,}원" if pay_cfg["1건당상한"] else "상한 없음"
+        cnt = f"{pay_cfg['최대건수']}건" if pay_cfg["최대건수"] else "무제한"
+        log(f"자동결제: 켜짐 · 1건당 {cap} · 최대 {cnt} · 지금까지 {state['결제건수']}건")
     for t in pending:
         log(f"  · {t['이름']} — {t['id']} ({t['인원']}명)")
 
@@ -355,7 +478,7 @@ def main() -> None:
                 if index:
                     time.sleep(GAP_SECONDS)
                 try:
-                    handle_target(korail, target, state)
+                    handle_target(korail, target, state, pay_cfg, card, card_error)
                 except PastDepartureError:
                     log(f"[{target['이름']}] 열차가 이미 출발했습니다. 목표에서 제외합니다.")
                     state["예약완료"][target["id"]] = {
