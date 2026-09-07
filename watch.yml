@@ -42,6 +42,11 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           DEVICE_PROFILE_ID: ${{ secrets.DEVICE_PROFILE_ID }}
+          CARD_NUMBER: ${{ secrets.CARD_NUMBER }}
+          CARD_PASSWORD: ${{ secrets.CARD_PASSWORD }}
+          CARD_VERIFY: ${{ secrets.CARD_VERIFY }}
+          CARD_EXPIRE: ${{ secrets.CARD_EXPIRE }}
+          CARD_CORPORATE: ${{ secrets.CARD_CORPORATE }}
           DRY_RUN: ${{ inputs.dry_run }}
           RUN_MINUTES: ${{ inputs.run_minutes || '25' }}
         run: python watch.py
