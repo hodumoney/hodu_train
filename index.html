@@ -219,15 +219,22 @@ function loadSetup(){
 }
 
 async function gh(path, options = {}){
-  const res = await fetch(`https://api.github.com/repos/${S.owner}/${S.repo}${path}`, {
-    ...options,
-    headers:{
-      "Authorization":`Bearer ${S.token}`,
-      "Accept":"application/vnd.github+json",
-      "Cache-Control":"no-cache",
-      ...(options.headers||{}),
-    },
-  });
+  const headers = {
+    "Authorization":`Bearer ${S.token}`,
+    "Accept":"application/vnd.github+json",
+    ...(options.headers||{}),
+  };
+  // GitHub API 가 허용하는 헤더만 보낸다. 목록에 없는 헤더를 붙이면
+  // 브라우저 사전 확인 단계에서 막혀 응답 코드 없이 실패한다.
+  if(options.body) headers["Content-Type"] = "application/json";
+
+  let res;
+  try{
+    res = await fetch(`https://api.github.com/repos/${S.owner}/${S.repo}${path}`,
+                      { ...options, headers });
+  }catch(err){
+    throw new Error("GitHub 에 연결하지 못했습니다. 인터넷 연결이나 광고 차단 확장 프로그램을 확인해보세요.");
+  }
   if(res.status === 401) throw new Error("토큰이 거부됐습니다. 설정에서 다시 넣어주세요.");
   if(res.status === 403) throw new Error("토큰 권한이 부족합니다. Actions와 Contents를 읽기·쓰기로 주세요.");
   if(res.status === 404){ const e = new Error("찾을 수 없습니다."); e.notFound = true; throw e; }
