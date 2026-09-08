@@ -24,7 +24,7 @@ permissions:
 jobs:
   watch:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
 
@@ -48,5 +48,5 @@ jobs:
           CARD_EXPIRE: ${{ secrets.CARD_EXPIRE }}
           CARD_CORPORATE: ${{ secrets.CARD_CORPORATE }}
           DRY_RUN: ${{ inputs.dry_run }}
-          RUN_MINUTES: ${{ inputs.run_minutes || '25' }}
+          RUN_MINUTES: ${{ inputs.run_minutes || '340' }}
         run: python watch.py
