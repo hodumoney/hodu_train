@@ -1,0 +1,53 @@
+name: KTX 열차 조회
+
+on:
+  workflow_dispatch:
+    inputs:
+      dep:
+        description: "출발역"
+        type: string
+        required: true
+      arr:
+        description: "도착역"
+        type: string
+        required: true
+      date:
+        description: "날짜 (2026-09-11)"
+        type: string
+        required: true
+      request_id:
+        description: "요청 번호 (사이트가 자동으로 넣음)"
+        type: string
+        required: false
+
+concurrency:
+  group: ktx-search
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 라이브러리 설치
+        run: pip install -r requirements.txt
+
+      - name: 조회
+        env:
+          KORAIL_ID: ${{ secrets.KORAIL_ID }}
+          KORAIL_PW: ${{ secrets.KORAIL_PW }}
+          DEVICE_PROFILE_ID: ${{ secrets.DEVICE_PROFILE_ID }}
+          SEARCH_DEP: ${{ inputs.dep }}
+          SEARCH_ARR: ${{ inputs.arr }}
+          SEARCH_DATE: ${{ inputs.date }}
+          SEARCH_REQUEST_ID: ${{ inputs.request_id }}
+        run: python search.py

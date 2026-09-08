@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>취소표 대기</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<style>
+:root{
+  --blue:#3182F6; --blue-dark:#1B64DA; --blue-bg:#E8F3FF;
+  --ink:#191F28; --ink-2:#4E5968; --ink-3:#8B95A1;
+  --bg:#F2F4F6; --bg-2:#F9FAFB; --card:#FFFFFF;
+  --orange:#C2570C; --orange-bg:#FFF3E8;
+  --red:#F04452; --red-bg:#FFEFF0;
+  --r-lg:20px; --r-md:14px; --r-sm:10px;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Pretendard Variable",Pretendard,system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif;
+  font-size:15px;line-height:1.5;letter-spacing:-.01em;
+  font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:44rem;margin:0 auto;padding:0 1rem 6rem}
+
+header{display:flex;align-items:center;gap:.5rem;padding:2rem .25rem 1.25rem}
+h1{margin:0;font-size:1.5rem;font-weight:700;letter-spacing:-.03em}
+header .spacer{flex:1}
+
+.card{background:var(--card);border-radius:var(--r-lg);padding:1.25rem;margin-bottom:.75rem}
+h2{font-size:1rem;font-weight:700;margin:0 0 .875rem;letter-spacing:-.02em}
+h2 .count{color:var(--ink-3);font-weight:500;margin-left:.375rem}
+
+select,input[type=date],input[type=text],input[type=password]{
+  font:inherit;font-variant-numeric:tabular-nums;letter-spacing:-.01em;
+  width:100%;padding:.75rem .875rem;border:0;border-radius:var(--r-md);
+  background:var(--bg-2);color:var(--ink);font-weight:600;
+  appearance:none;-webkit-appearance:none;cursor:pointer}
+input[type=date]{cursor:text}
+select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238B95A1' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right .875rem center;padding-right:2.25rem}
+
+.grid{display:grid;grid-template-columns:1fr auto 1fr;gap:.5rem;align-items:end}
+.field{display:flex;flex-direction:column;gap:.375rem;min-width:0}
+.field label{font-size:.8125rem;font-weight:500;color:var(--ink-3);padding-left:.125rem}
+.swap{display:flex;align-items:center;justify-content:center;height:2.875rem;width:1.75rem;
+  color:var(--ink-3);font-size:1.0625rem}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.5rem}
+
+button{font:inherit;letter-spacing:-.01em;cursor:pointer;border:0;font-weight:600;
+  border-radius:var(--r-md);transition:background .15s,opacity .15s}
+button:disabled{opacity:.45;cursor:not-allowed}
+.primary{width:100%;margin-top:.75rem;padding:.9375rem;font-size:1rem;
+  background:var(--blue);color:#fff}
+.primary:hover:not(:disabled){background:var(--blue-dark)}
+.pill{padding:.5rem .875rem;font-size:.8125rem;border-radius:999px;
+  background:var(--blue);color:#fff;white-space:nowrap}
+.pill:hover:not(:disabled){background:var(--blue-dark)}
+.pill.off{background:var(--bg);color:var(--ink-2)}
+.pill.off:hover:not(:disabled){background:#E5E8EB}
+.text-btn{background:none;color:var(--ink-3);font-size:.875rem;padding:.5rem .625rem;
+  border-radius:var(--r-sm)}
+.text-btn:hover{background:#E5E8EB;color:var(--ink-2)}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+
+.note{border-radius:var(--r-md);padding:.875rem 1rem;font-size:.875rem;
+  font-weight:500;margin-bottom:.75rem;background:var(--blue-bg);color:var(--blue-dark)}
+.note.bad{background:var(--red-bg);color:var(--red)}
+
+.train{display:flex;align-items:center;gap:.875rem;padding:.875rem .25rem;
+  border-radius:var(--r-md)}
+.train + .train{border-top:1px solid var(--bg)}
+.train:hover{background:var(--bg-2)}
+.when{width:4.25rem;flex-shrink:0}
+.chip.wait{letter-spacing:-.02em}
+.when b{display:block;font-size:1.25rem;font-weight:700;letter-spacing:-.04em;line-height:1.2}
+.when span{font-size:.75rem;color:var(--ink-3)}
+.who{flex:1;min-width:0}
+.who b{display:block;font-size:.9375rem;font-weight:600}
+.who span{font-size:.8125rem;color:var(--ink-3)}
+.chip{font-size:.75rem;font-weight:600;padding:.3125rem .5625rem;border-radius:999px;
+  white-space:nowrap;flex-shrink:0}
+.chip.open{background:var(--blue-bg);color:var(--blue-dark)}
+.chip.wait{background:var(--orange-bg);color:var(--orange)}
+.chip.full{background:var(--bg);color:var(--ink-3)}
+.chip.watch{background:var(--blue-bg);color:var(--blue-dark)}
+.chip.done{background:#E6F7EF;color:#00815A}
+.chip.unpaid{background:var(--red-bg);color:var(--red)}
+.train.on{background:var(--blue-bg)}
+.train.on:hover{background:#DCEBFF}
+
+.empty{color:var(--ink-3);font-size:.875rem;text-align:center;padding:2rem 1rem;line-height:1.6}
+
+.setup[hidden]{display:none}
+.setup .field{margin-bottom:.75rem}
+.setup p{margin:0;font-size:.8125rem;color:var(--ink-3);line-height:1.6}
+.setup .row2 .save{background:var(--blue);color:#fff;padding:.8125rem}
+.setup .row2 .save:hover{background:var(--blue-dark)}
+.setup .row2 .clear{background:var(--bg);color:var(--ink-2);padding:.8125rem}
+.setup .row2 .clear:hover{background:#E5E8EB}
+
+@media (max-width:30rem){
+  .wrap{padding:0 .75rem 5rem}
+  .card{padding:1rem;border-radius:var(--r-md)}
+  .when{width:3.75rem}
+  .when b{font-size:1.125rem}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>취소표 대기</h1>
+  <span class="spacer"></span>
+  <button class="text-btn" id="setupToggle">설정</button>
+</header>
+
+<div id="msg"></div>
+
+<section class="card setup" id="setup" hidden>
+  <h2>연결 설정</h2>
+  <div class="field">
+    <label for="repoInput">저장소</label>
+    <input type="text" id="repoInput" placeholder="hodumoney/hodu_train" autocomplete="off">
+  </div>
+  <div class="field">
+    <label for="tokenInput">GitHub 토큰</label>
+    <input type="password" id="tokenInput" placeholder="github_pat_..." autocomplete="off">
+  </div>
+  <p>토큰은 이 브라우저에만 저장됩니다. 이 저장소만 대상으로 Actions와 Contents를
+     읽기·쓰기로 준 토큰이 필요합니다. 카드 정보가 든 Secrets는 이 토큰으로 읽을 수 없습니다.</p>
+  <div class="row2">
+    <button class="save" id="saveSetup">저장</button>
+    <button class="clear" id="clearSetup">토큰 지우기</button>
+  </div>
+</section>
+
+<section class="card">
+  <div class="grid">
+    <div class="field">
+      <label for="dep">출발</label>
+      <select id="dep"></select>
+    </div>
+    <div class="swap">→</div>
+    <div class="field">
+      <label for="arr">도착</label>
+      <select id="arr"></select>
+    </div>
+  </div>
+  <div class="row2">
+    <div class="field">
+      <label for="date">날짜</label>
+      <input type="date" id="date">
+    </div>
+    <div class="field">
+      <label for="adults">인원</label>
+      <select id="adults">
+        <option value="1">어른 1명</option>
+        <option value="2">어른 2명</option>
+        <option value="3">어른 3명</option>
+        <option value="4">어른 4명</option>
+      </select>
+    </div>
+  </div>
+  <button class="primary" id="searchBtn">열차 조회</button>
+</section>
+
+<section class="card">
+  <h2 id="boardTitle">열차</h2>
+  <div id="boardBody">
+    <p class="empty">출발역과 도착역, 날짜를 고르고<br>열차를 조회하세요.</p>
+  </div>
+</section>
+
+<section class="card">
+  <h2>취소표 대기중<span class="count" id="watchCount"></span></h2>
+  <div id="watchBody"><p class="empty">대기 걸어둔 열차가 없습니다.</p></div>
+</section>
+
+</div>
+
+<script>
+const FALLBACK_STATIONS = ["행신","서울","용산","영등포","광명","수원","천안아산","오송","대전",
+"서대전","김천구미","동대구","서대구","경주","신경주","포항","울산(통도사)","밀양","구포","부산",
+"창원중앙","창원","마산","진영","진주","익산","정읍","광주송정","나주","목포","전주","남원","순천",
+"여천","여수엑스포","청량리","상봉","양평","서원주","횡성","둔내","평창","진부(오대산)","강릉",
+"만종","제천","안동","영주","동해","묵호","정동진"];
+
+const S = { owner:"", repo:"", token:"", stations:null, trains:null,
+            config:null, configSha:null, state:null, busy:false };
+
+const $ = id => document.getElementById(id);
+const enc = s => btoa(String.fromCharCode(...new TextEncoder().encode(s)));
+const dec = b => new TextDecoder().decode(
+  Uint8Array.from(atob(b.replace(/\s/g,"")), c => c.charCodeAt(0)));
+
+function say(text, kind){
+  $("msg").innerHTML = text ? `<div class="note ${kind||""}">${text}</div>` : "";
+}
+
+function guessRepo(){
+  const h = location.hostname, p = location.pathname.split("/").filter(Boolean);
+  if(h.endsWith("github.io") && p.length) return `${h.split(".")[0]}/${p[0]}`;
+  return "";
+}
+
+function loadSetup(){
+  S.token = localStorage.getItem("ktx.token") || "";
+  const slug = localStorage.getItem("ktx.repo") || guessRepo();
+  [S.owner, S.repo] = slug.split("/");
+  $("repoInput").value = slug || "";
+  $("tokenInput").value = S.token;
+  return Boolean(S.token && S.owner && S.repo);
+}
+
+async function gh(path, options = {}){
+  const res = await fetch(`https://api.github.com/repos/${S.owner}/${S.repo}${path}`, {
+    ...options,
+    headers:{
+      "Authorization":`Bearer ${S.token}`,
+      "Accept":"application/vnd.github+json",
+      "Cache-Control":"no-cache",
+      ...(options.headers||{}),
+    },
+  });
+  if(res.status === 401) throw new Error("토큰이 거부됐습니다. 설정에서 다시 넣어주세요.");
+  if(res.status === 403) throw new Error("토큰 권한이 부족합니다. Actions와 Contents를 읽기·쓰기로 주세요.");
+  if(res.status === 404){ const e = new Error("찾을 수 없습니다."); e.notFound = true; throw e; }
+  if(!res.ok) throw new Error(`GitHub 오류 ${res.status} — ${(await res.text()).slice(0,160)}`);
+  return res.status === 204 ? null : res.json();
+}
+
+async function readFile(path){
+  const data = await gh(`/contents/${path}?ref=main&t=${Date.now()}`);
+  return { json: JSON.parse(dec(data.content)), sha: data.sha };
+}
+
+async function writeFile(path, obj, sha, message){
+  return gh(`/contents/${path}`, { method:"PUT", body: JSON.stringify({
+    message, content: enc(JSON.stringify(obj, null, 2) + "\n"), sha, branch:"main" }) });
+}
+
+function fillStations(names){
+  for(const id of ["dep","arr"]){
+    const sel = $(id), keep = sel.value;
+    sel.innerHTML = names.map(n => `<option>${n}</option>`).join("");
+    sel.value = keep || (id === "dep" ? "서울" : "부산");
+  }
+}
+
+async function loadStations(){
+  try{
+    const { json } = await readFile("data/stations.json");
+    if(Array.isArray(json) && json.length){ S.stations = json; fillStations(json); return; }
+  }catch(e){ /* 첫 조회 전에는 기본 목록으로 시작한다 */ }
+  fillStations(FALLBACK_STATIONS);
+}
+
+const keyOf = t => `${t.출발역}>${t.도착역} ${t.날짜} ${t.시각}`;
+
+async function loadState(){
+  try{
+    const { json } = await readFile("state.json");
+    S.state = json;
+  }catch(e){ S.state = null; }
+}
+
+async function loadConfig(){
+  const { json, sha } = await readFile("config.json");
+  S.config = json; S.configSha = sha;
+  if(!Array.isArray(S.config.감시목표)) S.config.감시목표 = [];
+  renderWatching();
+}
+
+async function saveConfig(message){
+  const res = await writeFile("config.json", S.config, S.configSha, message);
+  S.configSha = res.content.sha;
+  renderWatching(); renderBoard();
+}
+
+const watchedKeys = () =>
+  new Set((S.config?.감시목표 || []).filter(t => t.사용 !== false).map(keyOf));
+
+async function startWatch(train){
+  const target = {
+    이름:`${$("dep").value}-${$("arr").value} ${train.출발}`,
+    출발역:$("dep").value, 도착역:$("arr").value, 날짜:$("date").value,
+    시각:train.출발, 어른:Number($("adults").value), 어린이:0,
+    예약대기:true, 사용:true,
+  };
+  const found = S.config.감시목표.find(t => keyOf(t) === keyOf(target));
+  if(found){ found.사용 = true; found.어른 = target.어른; }
+  else S.config.감시목표.push(target);
+  await saveConfig(`대기 추가 ${keyOf(target)}`);
+  say(`${train.출발} 열차에 대기를 걸었습니다. 좌석이 나오면 예약하고 텔레그램으로 알립니다.`);
+}
+
+async function stopWatch(key){
+  S.config.감시목표 = S.config.감시목표.filter(t => keyOf(t) !== key);
+  await saveConfig(`대기 해제 ${key}`);
+  say("대기를 해제했습니다.");
+}
+
+function renderWatching(){
+  const list = (S.config?.감시목표 || []).filter(t => t.사용 !== false);
+  $("watchCount").textContent = list.length || "";
+  const body = $("watchBody");
+  if(!list.length){
+    body.innerHTML = `<p class="empty">대기 걸어둔 열차가 없습니다.</p>`; return;
+  }
+  const done = S.state?.예약완료 || {};
+  const korailWaiting = new Set(S.state?.예약대기 || []);
+
+  body.innerHTML = list.map(t => {
+    const k = keyOf(t);
+    let cls = "watch", label = "취소표 대기 중";
+    if(done[k]){
+      const paid = done[k].결제 === "완료";
+      cls = paid ? "done" : "unpaid";
+      label = paid ? "예약·결제 완료" : "예약됨 · 결제 필요";
+    }else if(korailWaiting.has(k)){
+      cls = "wait"; label = "코레일 예약 대기 중";
+    }
+    return `
+    <div class="train on">
+      <div class="when"><b>${t.시각}</b><span>${Number(t.날짜.slice(5,7))}월 ${Number(t.날짜.slice(8))}일</span></div>
+      <div class="who"><b>${t.출발역} → ${t.도착역}</b><span>어른 ${t.어른 || 1}명</span></div>
+      <span class="chip ${cls}">${label}</span>
+      <button class="pill off" data-stop="${k}">해제</button>
+    </div>`; }).join("");
+  body.querySelectorAll("[data-stop]").forEach(b =>
+    b.onclick = () => guard(b, () => stopWatch(b.dataset.stop)));
+}
+
+function renderBoard(){
+  if(!S.trains) return;
+  const body = $("boardBody");
+  const { 출발역, 도착역, 날짜, 열차, 오류 } = S.trains;
+  $("boardTitle").innerHTML =
+    `${출발역} → ${도착역}<span class="count">${Number(날짜.slice(5,7))}월 ${Number(날짜.slice(8))}일</span>`;
+  if(오류 && !열차.length){ body.innerHTML = `<p class="empty">${오류}</p>`; return; }
+
+  const watched = watchedKeys();
+  body.innerHTML = 열차.map((t, i) => {
+    const key = `${출발역}>${도착역} ${날짜} ${t.출발}`;
+    const on = watched.has(key);
+    let cls = "full", label = "매진";
+    if(t.좌석){ cls = "open"; label = t.일반실 ? "좌석 있음" : "특실 있음"; }
+    else if(t.예약대기){ cls = "wait"; label = "코레일 예약대기 가능"; }
+    return `
+      <div class="train ${on ? "on" : ""}">
+        <div class="when"><b>${t.출발}</b><span>${t.도착} 도착</span></div>
+        <div class="who"><b>${t.종류} ${t.열차번호}</b><span>${t.소요}</span></div>
+        <span class="chip ${cls}">${label}</span>
+        ${on ? `<button class="pill off" data-stop="${key}">해제</button>`
+             : `<button class="pill" data-start="${i}">대기 걸기</button>`}
+      </div>`;
+  }).join("");
+
+  body.querySelectorAll("[data-start]").forEach(b =>
+    b.onclick = () => guard(b, () => startWatch(열차[Number(b.dataset.start)])));
+  body.querySelectorAll("[data-stop]").forEach(b =>
+    b.onclick = () => guard(b, () => stopWatch(b.dataset.stop)));
+}
+
+async function guard(btn, fn){
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = "…";
+  try{ await fn(); }
+  catch(e){ say(e.message, "bad"); }
+  finally{ btn.disabled = false; btn.textContent = label; }
+}
+
+async function runSearch(){
+  if(S.busy) return;
+  if($("dep").value === $("arr").value){ say("출발역과 도착역이 같습니다.", "bad"); return; }
+  if(!$("date").value){ say("날짜를 골라주세요.", "bad"); return; }
+
+  S.busy = true;
+  const btn = $("searchBtn");
+  btn.disabled = true; btn.textContent = "조회 중…";
+  const id = `q${Date.now()}`;
+  say("열차 목록을 받아오는 중입니다. 30초에서 1분쯤 걸립니다.");
+
+  try{
+    await gh("/actions/workflows/search.yml/dispatches", {
+      method:"POST",
+      body: JSON.stringify({ ref:"main", inputs:{
+        dep:$("dep").value, arr:$("arr").value, date:$("date").value, request_id:id } }),
+    });
+
+    for(let i = 0; i < 40; i++){
+      await new Promise(r => setTimeout(r, 5000));
+      try{
+        const { json } = await readFile("data/trains.json");
+        if(json.request_id === id){
+          S.trains = json;
+          await loadState();
+          renderWatching();
+          renderBoard();
+          say(json.오류 || "", json.오류 ? "bad" : "");
+          return;
+        }
+      }catch(e){ if(!e.notFound) throw e; }
+      if(i === 6) say("아직 받아오는 중입니다. 열차가 많은 구간은 조금 더 걸립니다.");
+    }
+    say("조회 결과가 오지 않았습니다. Actions 탭에서 실행이 실패했는지 확인해보세요.", "bad");
+  }catch(e){
+    say(e.notFound
+      ? "저장소나 워크플로를 찾을 수 없습니다. 설정에서 저장소 이름을 확인하세요."
+      : e.message, "bad");
+  }finally{
+    S.busy = false; btn.disabled = false; btn.textContent = "열차 조회";
+  }
+}
+
+$("setupToggle").onclick = () => { $("setup").hidden = !$("setup").hidden; };
+$("saveSetup").onclick = () => {
+  localStorage.setItem("ktx.repo", $("repoInput").value.trim());
+  localStorage.setItem("ktx.token", $("tokenInput").value.trim());
+  location.reload();
+};
+$("clearSetup").onclick = () => { localStorage.removeItem("ktx.token"); location.reload(); };
+$("searchBtn").onclick = runSearch;
+
+(async function init(){
+  const today = new Date(Date.now() + 9*3600e3).toISOString().slice(0,10);
+  $("date").value = today; $("date").min = today;
+
+  if(!loadSetup()){
+    fillStations(FALLBACK_STATIONS);
+    $("setup").hidden = false;
+    say("먼저 저장소와 GitHub 토큰을 넣어주세요.");
+    return;
+  }
+  try{
+    await loadState();
+    await loadConfig();
+    await loadStations();
+    say("");
+  }catch(e){
+    say(e.message, "bad");
+    $("setup").hidden = false;
+  }
+})();
+</script>
+</body>
+</html>
