@@ -15,7 +15,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from pykorail import Korail, PykorailError, TrainType
+from pykorail import Korail, NoResultsError, PykorailError, TrainType
 from pykorail.device import profile_by_id, random_profile
 
 ROOT = Path(__file__).resolve().parent
@@ -90,14 +90,24 @@ def collect_day(korail: Korail, day: datetime) -> list[dict]:
     seen: dict[str, dict] = {}
 
     for page in range(MAX_PAGES):
-        trains = korail.trains.search(
-            DEP,
-            ARR,
-            depart_after=cursor,
-            train_type=TrainType.ALL,
-            include_no_seats=True,
-            include_waiting_list=True,
-        )
+        try:
+            trains = korail.trains.search(
+                DEP,
+                ARR,
+                depart_after=cursor,
+                train_type=TrainType.ALL,
+                include_no_seats=True,
+                include_waiting_list=True,
+            )
+        except NoResultsError:
+            # 그 시각 이후로 열차가 없다는 뜻. 지금까지 모은 것이 하루치 전부다.
+            log(f"{page + 1}차 조회 — 더 이상 열차가 없습니다.")
+            break
+        except Exception as exc:  # noqa: BLE001
+            if seen:
+                log(f"{page + 1}차 조회에서 오류({type(exc).__name__}). 여기까지로 마칩니다.")
+                break
+            raise
         fresh = [t for t in trains if t.dep_date == day.strftime("%Y%m%d")]
         if not fresh:
             break
@@ -137,6 +147,22 @@ def collect_day(korail: Korail, day: datetime) -> list[dict]:
     return sorted(seen.values(), key=lambda t: t["출발"])
 
 
+def login(profile, attempts: int = 4):
+    """코레일 로그인. 일시적 장애가 잦아 몇 번 다시 시도한다."""
+    last = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return Korail.logged_in(KORAIL_ID, KORAIL_PW, device_profile=profile)
+        except Exception as exc:  # noqa: BLE001
+            last = exc
+            if attempt == attempts:
+                break
+            wait = 5 * attempt
+            log(f"로그인 실패({attempt}/{attempts}) — {type(exc).__name__}. {wait}초 뒤 다시 시도합니다.")
+            time.sleep(wait)
+    raise last
+
+
 def main() -> None:
     base = {"출발역": DEP, "도착역": ARR, "날짜": DATE, "열차": [], "오류": None}
 
@@ -155,9 +181,11 @@ def main() -> None:
     profile = profile_by_id(DEVICE_ID) or random_profile()
 
     try:
-        korail = Korail.logged_in(KORAIL_ID, KORAIL_PW, device_profile=profile)
-    except PykorailError as exc:
-        base["오류"] = f"코레일 로그인에 실패했습니다. {exc}"
+        korail = login(profile)
+    except Exception as exc:  # noqa: BLE001 - timeout 등 라이브러리 밖 예외도 포함
+        base["오류"] = ("코레일이 응답하지 않습니다. 잠시 뒤 다시 조회해보세요."
+                       if "Timeout" in type(exc).__name__
+                       else f"코레일 로그인에 실패했습니다. {exc}")
         write_result(base)
         sys.exit(1)
 
@@ -167,8 +195,8 @@ def main() -> None:
         save_stations(korail)
         try:
             base["열차"] = collect_day(korail, day)
-        except PykorailError as exc:
-            base["오류"] = str(exc)
+        except Exception as exc:  # noqa: BLE001
+            base["오류"] = f"조회 중 오류가 났습니다. {exc}"
             write_result(base)
             sys.exit(1)
 
