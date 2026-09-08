@@ -127,6 +127,22 @@ def save_state(state: dict) -> None:
 # ─────────────────────────── 설정 해석 ───────────────────────────
 
 
+def login(profile, attempts: int = 4):
+    """코레일 로그인. 일시적 장애가 잦아 몇 번 다시 시도한다."""
+    last = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return Korail.logged_in(KORAIL_ID, KORAIL_PW, device_profile=profile)
+        except Exception as exc:  # noqa: BLE001 - timeout 등 라이브러리 밖 예외도 포함
+            last = exc
+            if attempt == attempts:
+                break
+            wait = 10 * attempt
+            log(f"로그인 실패({attempt}/{attempts}) — {type(exc).__name__}. {wait}초 뒤 다시 시도합니다.")
+            time.sleep(wait)
+    raise last
+
+
 def build_card():
     """Secrets 에 카드 정보가 다 있으면 Card 를 만든다. 하나라도 없으면 None."""
     from pykorail import Card
@@ -457,10 +473,13 @@ def main() -> None:
         log(f"DEVICE_PROFILE_ID 가 없어 임시 기기로 돕니다: {profile.id}")
 
     try:
-        korail = Korail.logged_in(KORAIL_ID, KORAIL_PW, device_profile=profile)
-    except PykorailError as exc:
-        log(f"코레일 로그인 실패: {exc}")
-        notify(f"❌ 코레일 로그인에 실패했습니다.\n\n{exc}")
+        korail = login(profile)
+    except Exception as exc:  # noqa: BLE001
+        log(f"코레일 로그인 실패: {type(exc).__name__} {exc}")
+        if not isinstance(exc, (TimeoutError,)) and "Timeout" not in type(exc).__name__:
+            notify(f"❌ 코레일 로그인에 실패했습니다.\n\n{exc}")
+        else:
+            log("코레일 응답 지연입니다. 알림은 보내지 않고 다음 실행에 맡깁니다.")
         sys.exit(1)
 
     log(f"로그인 성공 — {korail.name}")
@@ -492,9 +511,13 @@ def main() -> None:
                     notify(f"⚠️ {target['이름']} — 역 이름이 잘못됐습니다.\n{exc}")
                 except NeedToLoginError:
                     log("세션이 만료됐습니다. 다시 로그인합니다.")
-                    korail.login(KORAIL_ID, KORAIL_PW)
-                except (KorailError, requests.RequestException) as exc:
-                    log(f"[{target['이름']}] 일시적 오류(계속 진행): {exc}")
+                    try:
+                        korail.login(KORAIL_ID, KORAIL_PW)
+                    except Exception as exc:  # noqa: BLE001
+                        log(f"재로그인 실패: {exc}. 이번 실행을 종료합니다.")
+                        return
+                except Exception as exc:  # noqa: BLE001 - 통신 오류로 감시가 죽으면 안 된다
+                    log(f"[{target['이름']}] 일시적 오류(계속 진행): {type(exc).__name__} {exc}")
 
             elapsed = time.time() - cycle_start
             if elapsed < CYCLE_SECONDS:
