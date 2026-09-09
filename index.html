@@ -543,7 +543,8 @@ function bind(root){
 
 function renderWatching(){
   const done = S.state?.예약완료 || {};
-  const korailWaiting = new Set(S.state?.예약대기 || []);
+  const w = S.state?.예약대기 || [];
+  const korailWaiting = new Set(Array.isArray(w) ? w : Object.keys(w));
   const list = (S.config?.감시목표 || [])
     .filter(t => t.사용 !== false && !done[keyOf(t)])
     .sort((a,b) => (a.날짜 + a.시각).localeCompare(b.날짜 + b.시각));
