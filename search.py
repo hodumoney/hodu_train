@@ -15,7 +15,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from pykorail import Korail, NoResultsError, PykorailError, TrainType
+from pykorail import Korail, NoResultsError, PastDepartureError, PykorailError, TrainType
 from pykorail.device import profile_by_id, random_profile
 
 ROOT = Path(__file__).resolve().parent
@@ -86,7 +86,9 @@ def save_stations(korail: Korail) -> None:
 
 def collect_day(korail: Korail, day: datetime) -> list[dict]:
     """하루치 열차를 모은다. 한 번 조회로는 앞쪽 몇 편만 오므로 이어서 훑는다."""
-    cursor = day.replace(hour=0, minute=0)
+    # 오늘을 조회하면 자정은 이미 지난 시각이라 코레일이 거절한다.
+    now = datetime.now(KST).replace(tzinfo=None)
+    cursor = max(day.replace(hour=0, minute=0), now)
     seen: dict[str, dict] = {}
 
     for page in range(MAX_PAGES):
@@ -99,8 +101,8 @@ def collect_day(korail: Korail, day: datetime) -> list[dict]:
                 include_no_seats=True,
                 include_waiting_list=True,
             )
-        except NoResultsError:
-            # 그 시각 이후로 열차가 없다는 뜻. 지금까지 모은 것이 하루치 전부다.
+        except (NoResultsError, PastDepartureError):
+            # 그 시각 이후로 열차가 없다는 뜻. 지금까지 모은 것이 전부다.
             log(f"{page + 1}차 조회 — 더 이상 열차가 없습니다.")
             break
         except Exception as exc:  # noqa: BLE001
@@ -201,7 +203,10 @@ def main() -> None:
             sys.exit(1)
 
     if not base["열차"]:
-        base["오류"] = "해당 날짜에 운행하는 열차를 찾지 못했습니다. 역 이름과 날짜를 확인하세요."
+        today = datetime.now(KST).strftime("%Y-%m-%d")
+        base["오류"] = ("오늘 이 구간에 남은 열차가 없습니다. 다른 날짜를 골라보세요."
+                       if DATE == today
+                       else "해당 날짜에 운행하는 열차를 찾지 못했습니다. 역 이름과 날짜를 확인하세요.")
 
     log(f"총 {len(base['열차'])}편")
     write_result(base)
