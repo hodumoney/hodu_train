@@ -29,6 +29,7 @@ from pykorail import (
     ChildPassenger,
     Korail,
     KorailError,
+    LoginFailedError,
     NeedToLoginError,
     NoResultsError,
     PastDepartureError,
@@ -153,17 +154,25 @@ def pull_repo() -> bool:
 
 
 def login(profile, attempts: int = 4):
-    """코레일 로그인. 일시적 장애가 잦아 몇 번 다시 시도한다."""
+    """코레일 로그인.
+
+    응답 지연·통신 오류만 다시 시도한다. 자격증명이 거부된 경우는 한 번으로
+    끝낸다 — 틀린 비밀번호를 반복해 넣으면 계정 잠금을 부를 수 있다.
+    """
     last = None
     for attempt in range(1, attempts + 1):
         try:
             return Korail.logged_in(KORAIL_ID, KORAIL_PW, device_profile=profile)
+        except LoginFailedError as exc:
+            log(f"코레일이 로그인을 거부했습니다 — {exc}")
+            raise
         except Exception as exc:  # noqa: BLE001 - timeout 등 라이브러리 밖 예외도 포함
             last = exc
             if attempt == attempts:
                 break
             wait = 10 * attempt
-            log(f"로그인 실패({attempt}/{attempts}) — {type(exc).__name__}. {wait}초 뒤 다시 시도합니다.")
+            log(f"로그인 실패({attempt}/{attempts}) — {type(exc).__name__}: {exc}. "
+                f"{wait}초 뒤 다시 시도합니다.")
             time.sleep(wait)
     raise last
 
@@ -495,7 +504,10 @@ def main() -> None:
         korail = login(profile)
     except Exception as exc:  # noqa: BLE001
         log(f"코레일 로그인 실패: {type(exc).__name__} {exc}")
-        if "Timeout" not in type(exc).__name__:
+        if isinstance(exc, LoginFailedError):
+            notify(f"❌ 코레일이 로그인을 거부했습니다.\n\n{exc}\n\n"
+                   f"코레일톡 앱에서 같은 계정으로 로그인되는지 확인해보세요.")
+        elif "Timeout" not in type(exc).__name__:
             notify(f"❌ 코레일 로그인에 실패했습니다.\n\n{exc}")
         else:
             log("코레일 응답 지연입니다. 알림 없이 다음 실행에 맡깁니다.")
