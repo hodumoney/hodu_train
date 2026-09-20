@@ -1,0 +1,29 @@
+name: 로그인 진단
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ktx-diagnose
+  cancel-in-progress: true
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 라이브러리 설치
+        run: pip install -r requirements.txt
+
+      - name: 진단
+        env:
+          KORAIL_ID: ${{ secrets.KORAIL_ID }}
+          KORAIL_PW: ${{ secrets.KORAIL_PW }}
+          DEVICE_PROFILE_ID: ${{ secrets.DEVICE_PROFILE_ID }}
+        run: python diagnose.py
