@@ -20,6 +20,10 @@ SHOW = {
     "strResult", "h_msg_cd", "h_msg_txt", "h_result_cd", "h_result_msg",
     "strAppVer", "strSubAppVer", "h_min_ver", "h_new_ver", "h_upd_yn",
     "strLoginYn", "strCustDvCd", "h_curr_dtm",
+    # 코레일 앱 형식이 아닌 오류 봉투로 올 때의 항목들.
+    # 개인정보가 아니라 서버가 왜 막았는지를 담은 값이다.
+    "code", "message", "error", "error_code", "error_description",
+    "status", "statusCode", "detail", "title", "reason", "path",
 }
 
 KORAIL_ID = os.environ.get("KORAIL_ID", "").strip()
